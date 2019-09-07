@@ -21,10 +21,10 @@ class GameTreeNode:
         self.children.append(GameTreeNode())
 
 class MCTSAgent:
-    def __init__(self, side, eval_inbox, eval_outbox, eval_idx,
+    def __init__(self, side, eval_queue, eval_outbox, eval_idx,
         c_puct, tau, n_virtual_loss):
         self.side = side
-        self.eval_inbox = eval_inbox
+        self.eval_queue = eval_queue
         self.eval_outbox = eval_outbox
         self.eval_idx = eval_idx
         self.board = dotboxes.Board()
@@ -63,8 +63,10 @@ class MCTSAgent:
         leaf, leaf_board, path = self.select()
         # eval leaf
         if not leaf_board.is_game_over():
-            self.eval_inbox.put((leaf_board, self.eval_idx))
+            self.eval_queue.put((leaf_board, self.eval_idx))
             action, value = self.eval_outbox.recv()
+            value = value.item()
+            value *= (1 if self.side == leaf_board.turn else -1)
             # expand leaf
             action = torch.exp(action)
             for move in leaf_board.legal_moves:
@@ -76,10 +78,13 @@ class MCTSAgent:
         self.backup(path, value)
 
     def best_move(self):
-        dist = np.power(self.root.ns, 1 / self.tau)
-        dist /= np.sum(dist)
-        out = np.random.multinomial(1, dist)
-        out = np.argmax(out)
+        if self.tau != 0:
+            dist = np.power(self.root.ns, 1 / self.tau)
+            dist /= np.sum(dist)
+            out = np.random.multinomial(1, dist)
+            out = np.argmax(out)
+        else:
+            out = np.argmax(self.root.ns)
         out = self.root.moves[out]
         return out
 
@@ -96,39 +101,54 @@ class MCTSAgent:
         self.root = GameTreeNode()
 
 class SelfPlayWorker(mp.Process):
-    def __init__(self, eval_inbox, eval_outbox, eval_idx):
+    def __init__(self, eval_queue, game_queue, eval_pipe_a, eval_idx_a,
+        eval_pipe_b, eval_idx_b, zero_temp_t=10, n_search_steps=100):
         super(SelfPlayWorker, self).__init__()
-        self.agent = MCTSAgent(True, eval_inbox, eval_outbox, eval_idx,
+        self.zero_temp_t = zero_temp_t
+        self.n_search_steps = n_search_steps
+        self.agent_a = MCTSAgent(True, eval_queue, eval_pipe_a, eval_idx_a,
             0.5, 1, 3)
+        self.agent_b = MCTSAgent(False, eval_queue, eval_pipe_b, eval_idx_b,
+            0.5, 1, 3)
+        self.game_queue = game_queue
 
     def run(self):
         while True:
             board = dotboxes.Board()
+            self.agent_a.tau = 1
+            self.agent_b.tau = 1
+            t = 0
+            moves = []
             while not board.is_game_over():
-                if board.turn:
-                    for t in range(100):
-                        self.agent.search_step()
-                    move = self.agent.best_move()
-                else:
-                    import random
-                    move = random.choice(list(board.legal_moves))
+                if t == self.zero_temp_t:
+                    self.agent_a.tau = 0
+                    self.agent_b.tau = 0
+                agent = self.agent_a if board.turn else self.agent_b
+                for i in range(self.n_search_steps):
+                    agent.search_step()
+                move = agent.best_move()
+                moves.append(move)
 
                 board.push(move)
-                self.agent.commit_move(move)
+                self.agent_a.commit_move(move)
+                self.agent_b.commit_move(move)
                 print(board)
-            self.agent.reset()
+                t += 1
+            self.agent_a.reset()
+            self.agent_b.reset()
+            self.game_queue.put(moves)
 
 class LeafEvalWorker(mp.Process):
-    def __init__(self, batch_size, eval_inbox, eval_pipes):
+    def __init__(self, batch_size, eval_queue, eval_pipes):
         super(LeafEvalWorker, self).__init__()
-        self.eval_inbox = eval_inbox
+        self.eval_queue = eval_queue
         self.eval_pipes = eval_pipes
         self.batch_size = batch_size
         self.policy = Policy()
 
     def run(self):
         while True:
-            boards, idxs = zip(*[self.eval_inbox.get() for i in
+            boards, idxs = zip(*[self.eval_queue.get() for i in
                 range(self.batch_size)])
             boards_t = boards_to_tensor(boards)
             with torch.no_grad():
@@ -137,11 +157,22 @@ class LeafEvalWorker(mp.Process):
                 self.eval_pipes[idxs[i]].send((actions[i], values[i]))
 
 if __name__ == "__main__":
-    eval_inbox = mp.Queue()
-    eval_pipe_recv, eval_pipe_send = mp.Pipe(duplex=False)
-    search_worker = SelfPlayWorker(eval_inbox, eval_pipe_recv, 0)
-    eval_worker = LeafEvalWorker(1, eval_inbox, [eval_pipe_send])
+    def peek_games(game_queue):
+        while True:
+            print(game_queue.get())
+
+    eval_queue = mp.Queue()
+    game_queue = mp.Queue()
+    eval_pipe_recv_a, eval_pipe_send_a = mp.Pipe(duplex=False)
+    eval_pipe_recv_b, eval_pipe_send_b = mp.Pipe(duplex=False)
+    search_worker = SelfPlayWorker(eval_queue, game_queue, eval_pipe_recv_a, 0,
+        eval_pipe_recv_b, 1)
+    eval_worker = LeafEvalWorker(1, eval_queue,
+        [eval_pipe_send_a, eval_pipe_send_b])
     search_worker.start()
     eval_worker.start()
+    peek_proc = mp.Process(target=peek_games, args=(game_queue,))
+    peek_proc.start()
+    peek_proc.join()
     search_worker.join()
     eval_worker.join()

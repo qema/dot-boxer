@@ -23,7 +23,7 @@ class GameTreeNode:
 
 class MCTSAgent:
     def __init__(self, side, eval_queue, eval_outbox, eval_idx,
-        c_puct, tau, n_virtual_loss):
+        c_puct, tau, n_virtual_loss, use_dirichlet_noise=False):
         self.side = side
         self.eval_queue = eval_queue
         self.eval_outbox = eval_outbox
@@ -33,6 +33,7 @@ class MCTSAgent:
         self.c_puct = c_puct
         self.tau = tau
         self.n_virtual_loss = n_virtual_loss
+        self.use_dirichlet_noise = use_dirichlet_noise
 
     def select(self):
         cur = self.root
@@ -70,9 +71,14 @@ class MCTSAgent:
             value *= (1 if self.side == leaf_board.turn else -1)
             # expand leaf
             action = torch.exp(action)
-            for move in leaf_board.legal_moves:
-                leaf.add_edge(move, 0, 0, 0,
-                    action[move_to_action_idx(move)].item())
+            legal_moves = leaf_board.legal_moves
+            if self.use_dirichlet_noise and leaf is self.root:
+                eta = np.random.dirichlet([0.03], len(legal_moves))
+            for i, move in enumerate(legal_moves):
+                prior_p = action[move_to_action_idx(move)].item()
+                if self.use_dirichlet_noise and leaf is self.root:
+                    prior_p = 0.75*prior_p + 0.25*eta[i]
+                leaf.add_edge(move, 0, 0, 0, prior_p)
         else:
             value = reward_for_side(leaf_board, self.side)
         # backup
@@ -90,7 +96,7 @@ class MCTSAgent:
             policy[move_to_action_idx(self.root.moves[best_idx])] = 1
         return policy
 
-    def best_move(self):
+    def choose_move(self):
         if self.tau != 0:
             dist = np.power(self.root.ns, 1 / self.tau)
             dist /= np.sum(dist)
@@ -120,9 +126,9 @@ class SelfPlayWorker(mp.Process):
         self.zero_temp_t = zero_temp_t
         self.n_search_steps = n_search_steps
         self.agent_a = MCTSAgent(True, eval_queue, eval_pipe, eval_idx,
-            0.5, 1, 3)
+            0.5, 1, 3, use_dirichlet_noise=False)
         self.agent_b = MCTSAgent(False, eval_queue, eval_pipe, eval_idx,
-            0.5, 1, 3)
+            0.5, 1, 3, use_dirichlet_noise=False)
         self.game_queue = game_queue
 
     def run(self):
@@ -133,13 +139,13 @@ class SelfPlayWorker(mp.Process):
             t = 0
             moves, dists = [], []
             while not board.is_game_over():
-                if t == self.zero_temp_t:
-                    self.agent_a.tau = 0
-                    self.agent_b.tau = 0
+                #if t == self.zero_temp_t:
+                #    self.agent_a.tau = 0
+                #    self.agent_b.tau = 0
                 agent = self.agent_a if board.turn else self.agent_b
                 for i in range(self.n_search_steps):
                     agent.search_step()
-                move = agent.best_move()
+                move = agent.choose_move()
                 dist = agent.move_dist()
                 moves.append(move)
                 dists.append(dist)
@@ -147,11 +153,11 @@ class SelfPlayWorker(mp.Process):
                 board.push(move)
                 self.agent_a.commit_move(move)
                 self.agent_b.commit_move(move)
-                print(board)
+                #print(board)
                 t += 1
             self.agent_a.reset()
             self.agent_b.reset()
-            self.game_queue.put((moves, dists, board.result()))
+            self.game_queue.put((moves, dists, np.sign(board.result())))
 
 class LeafEvalWorker(mp.Process):
     # set alpha_pipe to None if not using

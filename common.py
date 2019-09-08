@@ -55,7 +55,7 @@ def move_to_action_idx(move):
     return hv*board_size + row*dotboxes.n_cols + col
 
 def reward_for_side(board, side):
-    return (board.result()) * (1 if side else -1)
+    return np.sign(board.result()) * (1 if side else -1)
 
 if __name__ == "__main__":
     policy = Policy()

@@ -12,6 +12,7 @@ class TrainWorker(mp.Process):
     def run(self):
         opt = optim.SGD(self.policy.parameters(), lr=1e-2, momentum=0.9,
             weight_decay=1e-4)
+        #opt = optim.Adam(self.policy.parameters(), lr=1e-2)
         while True:
             boards, dists, rewards = self.minibatch_queue.get()
             boards_t = boards_to_tensor(boards)
@@ -35,7 +36,7 @@ class TrainWorker(mp.Process):
 
 class TrainManager(mp.Process):
     def __init__(self, game_queue, trained_queue, n_workers=1,
-        start_t=100, max_n_games=100000, max_queue_size=8,
+        start_t=1000, max_n_games=100000, max_queue_size=8,
         minibatch_size=32, submit_interval=1000):
         super(TrainManager, self).__init__()
         self.game_queue = game_queue
@@ -43,6 +44,7 @@ class TrainManager(mp.Process):
         self.game_moves = [None]*max_n_games
         self.game_dists = np.zeros((max_n_games, action_space_size()),
             dtype=np.float)
+        # rewards are relative to player A
         self.game_rewards = np.zeros(max_n_games, dtype=np.int8)
         self.game_starts = np.zeros(max_n_games, dtype=np.int8)
         self.game_next_free_idx = 0
@@ -64,7 +66,9 @@ class TrainManager(mp.Process):
                 self.game_dists[idx] = dist
                 self.game_starts[idx] = True if i == 0 else False
                 self.game_next_free_idx += 1
-            if self.game_next_free_idx >= self.start_t:
+            if self.game_next_free_idx >= self.start_t and \
+                not has_games_event.is_set():
+                print("start training")
                 has_games_event.set()
 
     def get_minibatches(self, has_games_event, minibatch_queue):
@@ -82,9 +86,10 @@ class TrainManager(mp.Process):
                 while not self.game_starts[cur % self.max_n_games]:
                     cur -= 1
                     move_stack.append(self.game_moves[cur % self.max_n_games])
-                reward = self.game_rewards[cur % self.max_n_games]
                 for move in reversed(move_stack):
                     board.push(move)
+                reward = self.game_rewards[cur % self.max_n_games]
+                reward *= (1 if board.turn else -1)
                 boards.append(board)
                 dists.append(dist)
                 rewards.append(reward)

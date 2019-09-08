@@ -1,6 +1,6 @@
 import dotboxes
 from common import *
-from mcts import *
+from selfplay import *
 from train import *
 from evaluation import *
 

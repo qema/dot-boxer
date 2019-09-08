@@ -10,7 +10,8 @@ class TrainWorker(mp.Process):
         self.policy = policy
 
     def run(self):
-        opt = optim.Adam(self.policy.parameters(), lr=1e-3)
+        opt = optim.SGD(self.policy.parameters(), lr=1e-2, momentum=0.9,
+            weight_decay=1e-4)
         while True:
             boards, dists, rewards = self.minibatch_queue.get()
             boards_t = boards_to_tensor(boards)
@@ -24,18 +25,18 @@ class TrainWorker(mp.Process):
             action, value = self.policy(boards_t)
             value = value.flatten()
             ce_loss = (action * dists_t).sum(dim=1)
-            ce_loss = torch.mean(ce_loss)
+            ce_loss = -torch.mean(ce_loss)
+            #print(ce_loss.item(), F.mse_loss(value, rewards_t).item())
             loss = F.mse_loss(value, rewards_t) + ce_loss
             loss.backward()
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
             opt.step()
 
             self.notify_queue.put(loss.item())
 
 class TrainManager(mp.Process):
     def __init__(self, game_queue, trained_queue, n_workers=1,
-        max_n_games=100000, max_queue_size=8, minibatch_size=32,
-        submit_interval=1000):
+        start_t=100, max_n_games=100000, max_queue_size=8,
+        minibatch_size=32, submit_interval=1000):
         super(TrainManager, self).__init__()
         self.game_queue = game_queue
         self.trained_queue = trained_queue
@@ -45,6 +46,7 @@ class TrainManager(mp.Process):
         self.game_rewards = np.zeros(max_n_games, dtype=np.int8)
         self.game_starts = np.zeros(max_n_games, dtype=np.int8)
         self.game_next_free_idx = 0
+        self.start_t = start_t
         self.max_n_games = max_n_games
         self.n_workers = n_workers
         self.max_queue_size = max_queue_size
@@ -62,7 +64,7 @@ class TrainManager(mp.Process):
                 self.game_dists[idx] = dist
                 self.game_starts[idx] = True if i == 0 else False
                 self.game_next_free_idx += 1
-            if self.game_next_free_idx >= self.minibatch_size:
+            if self.game_next_free_idx >= self.start_t:
                 has_games_event.set()
 
     def get_minibatches(self, has_games_event, minibatch_queue):

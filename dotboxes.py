@@ -1,7 +1,7 @@
 import numpy as np
 
-n_rows = 2
-n_cols = 3
+n_rows = 5
+n_cols = 5
 class Board:
     def __init__(self):
         self.n_rows = n_rows

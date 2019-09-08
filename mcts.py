@@ -1,5 +1,6 @@
 from common import *
 import numpy as np
+import threading
 
 class GameTreeNode:
     def __init__(self):
@@ -77,6 +78,18 @@ class MCTSAgent:
         # backup
         self.backup(path, value)
 
+    def move_dist(self):
+        policy = np.zeros(action_space_size())
+        if self.tau != 0:
+            dist = np.power(self.root.ns, 1 / self.tau)
+            dist /= np.sum(dist)
+            for p, move in zip(dist, self.root.moves):
+                policy[move_to_action_idx(move)] = p
+        else:
+            best_idx = np.argmax(self.root.ns)
+            policy[move_to_action_idx(self.root.moves[best_idx])] = 1
+        return policy
+
     def best_move(self):
         if self.tau != 0:
             dist = np.power(self.root.ns, 1 / self.tau)
@@ -101,14 +114,14 @@ class MCTSAgent:
         self.root = GameTreeNode()
 
 class SelfPlayWorker(mp.Process):
-    def __init__(self, eval_queue, game_queue, eval_pipe_a, eval_idx_a,
-        eval_pipe_b, eval_idx_b, zero_temp_t=10, n_search_steps=100):
+    def __init__(self, eval_queue, game_queue, eval_pipe, eval_idx,
+        zero_temp_t=10, n_search_steps=100):
         super(SelfPlayWorker, self).__init__()
         self.zero_temp_t = zero_temp_t
         self.n_search_steps = n_search_steps
-        self.agent_a = MCTSAgent(True, eval_queue, eval_pipe_a, eval_idx_a,
+        self.agent_a = MCTSAgent(True, eval_queue, eval_pipe, eval_idx,
             0.5, 1, 3)
-        self.agent_b = MCTSAgent(False, eval_queue, eval_pipe_b, eval_idx_b,
+        self.agent_b = MCTSAgent(False, eval_queue, eval_pipe, eval_idx,
             0.5, 1, 3)
         self.game_queue = game_queue
 
@@ -118,7 +131,7 @@ class SelfPlayWorker(mp.Process):
             self.agent_a.tau = 1
             self.agent_b.tau = 1
             t = 0
-            moves = []
+            moves, dists = [], []
             while not board.is_game_over():
                 if t == self.zero_temp_t:
                     self.agent_a.tau = 0
@@ -127,7 +140,9 @@ class SelfPlayWorker(mp.Process):
                 for i in range(self.n_search_steps):
                     agent.search_step()
                 move = agent.best_move()
+                dist = agent.move_dist()
                 moves.append(move)
+                dists.append(dist)
 
                 board.push(move)
                 self.agent_a.commit_move(move)
@@ -136,17 +151,29 @@ class SelfPlayWorker(mp.Process):
                 t += 1
             self.agent_a.reset()
             self.agent_b.reset()
-            self.game_queue.put(moves)
+            self.game_queue.put((moves, dists, board.result()))
 
 class LeafEvalWorker(mp.Process):
-    def __init__(self, batch_size, eval_queue, eval_pipes):
+    # set alpha_pipe to None if not using
+    def __init__(self, eval_queue, eval_pipes, alpha_pipe, batch_size=1):
         super(LeafEvalWorker, self).__init__()
         self.eval_queue = eval_queue
         self.eval_pipes = eval_pipes
+        self.alpha_pipe = alpha_pipe
         self.batch_size = batch_size
         self.policy = Policy()
 
+    def retrieve_new_alphas(self):
+        if self.alpha_pipe is not None:
+            while True:
+                alpha = self.alpha_pipe.recv()
+                self.policy.load_state_dict(alpha)
+
     def run(self):
+        retrieve_alphas_thread = threading.Thread(
+            target=self.retrieve_new_alphas, daemon=True)
+        retrieve_alphas_thread.start()
+
         while True:
             boards, idxs = zip(*[self.eval_queue.get() for i in
                 range(self.batch_size)])
@@ -156,6 +183,32 @@ class LeafEvalWorker(mp.Process):
             for i in range(len(boards)):
                 self.eval_pipes[idxs[i]].send((actions[i], values[i]))
 
+        retrieve_alphas_thread.join()
+
+class SelfPlayManager(mp.Process):
+    def __init__(self, alpha_queue, game_queue):
+        super(SelfPlayManager, self).__init__()
+        self.alpha_queue = alpha_queue
+        self.game_queue = game_queue
+
+    def run(self):
+        eval_queue = mp.Queue()
+        eval_pipe_recv, eval_pipe_send = mp.Pipe(duplex=False)
+        alpha_pipe_recv, alpha_pipe_send = mp.Pipe(duplex=False)
+        search_worker = SelfPlayWorker(eval_queue, self.game_queue,
+            eval_pipe_recv, 0)
+        leaf_eval_worker = LeafEvalWorker(eval_queue, [eval_pipe_send],
+            alpha_pipe_recv)
+        search_worker.start()
+        leaf_eval_worker.start()
+
+        while True:
+            alpha = self.alpha_queue.get()
+            alpha_pipe_send.send(alpha)
+
+        search_worker.join()
+        leaf_eval_worker.join()
+
 if __name__ == "__main__":
     def peek_games(game_queue):
         while True:
@@ -163,12 +216,9 @@ if __name__ == "__main__":
 
     eval_queue = mp.Queue()
     game_queue = mp.Queue()
-    eval_pipe_recv_a, eval_pipe_send_a = mp.Pipe(duplex=False)
-    eval_pipe_recv_b, eval_pipe_send_b = mp.Pipe(duplex=False)
-    search_worker = SelfPlayWorker(eval_queue, game_queue, eval_pipe_recv_a, 0,
-        eval_pipe_recv_b, 1)
-    eval_worker = LeafEvalWorker(1, eval_queue,
-        [eval_pipe_send_a, eval_pipe_send_b])
+    eval_pipe_recv, eval_pipe_send = mp.Pipe(duplex=False)
+    search_worker = SelfPlayWorker(eval_queue, game_queue, eval_pipe_recv, 0)
+    eval_worker = LeafEvalWorker(eval_queue, [eval_pipe_send])
     search_worker.start()
     eval_worker.start()
     peek_proc = mp.Process(target=peek_games, args=(game_queue,))

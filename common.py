@@ -38,6 +38,9 @@ def boards_to_tensor(boards):
             torch.float).to(get_device()))
     return torch.stack(boards_t)
 
+def action_space_size():
+    return 2 * dotboxes.n_rows * dotboxes.n_cols
+
 def action_idx_to_move(action_idx):
     action_idx = action_idx.item()
     board_size = dotboxes.n_rows * dotboxes.n_cols

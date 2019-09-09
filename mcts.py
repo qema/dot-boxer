@@ -1,6 +1,7 @@
 from common import *
 import numpy as np
 import threading
+import queue
 
 class GameTreeNode:
     def __init__(self):
@@ -61,29 +62,24 @@ class MCTSAgent:
                 cur.qs[idx] = cur.ws[idx] / cur.ns[idx]
                 cur = cur.children[idx]
 
-    def eval_board(self, board):
-        board_t = boards_to_tensor([board])
-        with torch.no_grad():
-            action, value = self.policy(board_t)
-        action = action.squeeze(0)
-        value = value[0].item()
-        value *= (1 if self.side == board.turn else -1)
-        return action, value
-
-    def search_step(self):
+    def search_step(self, thread_idx, eval_in_queue, eval_out_queue):
         # search for leaf
         leaf, leaf_board, path = self.select()
         # eval leaf
         if not leaf_board.is_game_over():
-            action, value = self.eval_board(leaf_board)
+            if eval_in_queue is not None:
+                eval_in_queue.put((leaf_board, thread_idx))
+                action, value = eval_out_queue.get()
+            else:
+                action, value = self.eval_board(leaf_board)
             # expand leaf
-            action = torch.exp(action)
+            action = np.exp(action)
             legal_moves = leaf_board.legal_moves
             if self.use_dirichlet_noise and leaf is self.root:
                 eta = np.random.dirichlet([0.03], len(legal_moves))
             with leaf.lock:
                 for i, move in enumerate(legal_moves):
-                    prior_p = action[move_to_action_idx(move)].item()
+                    prior_p = action[move_to_action_idx(move)]
                     if self.use_dirichlet_noise and leaf is self.root:
                         prior_p = 0.75*prior_p + 0.25*eta[i]
                     leaf.add_edge(move, 0, 0, 0, prior_p)
@@ -92,27 +88,74 @@ class MCTSAgent:
         # backup
         self.backup(path, value)
 
-    def eval_boards(self):
-        # TODO: implement
-        pass
+    def eval_board(self, board):
+        board_t = boards_to_tensor([board])
+        with torch.no_grad():
+            action, value = self.policy(board_t)
+        action = action.squeeze(0).numpy()
+        value = value[0].item()
+        value *= (1 if self.side == board.turn else -1)
+        return action, value
 
-    def search(self, n_steps, n_threads=1):
-        # TODO: not exact number of steps
-        n_steps_per_thread = n_steps // n_threads
-        def search_n_steps(n):
-            for i in range(n):
-                self.search_step()
-        search_threads = []
-        for i in range(n_threads):
-            thread = threading.Thread(target=search_n_steps,
-                args=(n_steps_per_thread,))
-            thread.start()
-            search_threads.append(thread)
-        eval_thread = threading.Thread(target=self.eval_boards)
-        eval_thread.start()
-        eval_thread.join()
-        for thread in search_threads:
-            thread.join()
+    def eval_boards_async(self, eval_in_queue, eval_out_queues, batch_size=8):
+        boards, idxs = [], []
+        n_threads = self.n_threads_left
+        while self.n_threads_left > 0:
+            if not eval_in_queue.empty():
+                board, idx = eval_in_queue.get()
+                boards.append(board)
+                idxs.append(idx)
+            if boards and (self.n_threads_left < batch_size or
+                len(boards) >= batch_size):
+                batch_boards, boards = boards[:batch_size], boards[batch_size:]
+                batch_idxs, idxs = idxs[:batch_size], idxs[batch_size:]
+
+                boards_t = boards_to_tensor(batch_boards)
+                with torch.no_grad():
+                    actions, values = self.policy(boards_t)
+                actions = actions.numpy()
+                values = values.numpy()
+                for i in range(len(actions)):
+                    v = values[i][0] * (1 if self.side == batch_boards[i].turn
+                        else -1)
+                    eval_out_queues[batch_idxs[i]].put((actions[i], v))
+
+    # n_threads=0 for synchronous implementation
+    def search(self, n_steps, n_threads=0):
+        if n_threads == 0:
+            for i in range(n_steps):
+                self.search_step(0, None, None)
+        else:
+            # note: not exact number of steps since might not divide evenly
+            self.n_threads_left = n_threads
+            n_steps_per_thread = n_steps // n_threads
+            def search_n_steps(n, thread_idx, eval_in_queue, eval_out_queue,
+                done_lock):
+                for i in range(n):
+                    self.search_step(thread_idx, eval_in_queue, eval_out_queue)
+                with done_lock:
+                    self.n_threads_left -= 1
+            search_threads = []
+            eval_in_queue = queue.Queue()
+            eval_out_queues = []
+            done_lock = threading.Lock()
+            for i in range(n_threads):
+                # all leftover steps go to 0th thread
+                n_steps_real = n_steps_per_thread if i > 0 else \
+                    n_steps - (n_threads-1)*n_steps_per_thread
+                eval_out_queue = queue.Queue()
+                eval_out_queues.append(eval_out_queue)
+                thread = threading.Thread(target=search_n_steps,
+                    args=(n_steps_real, i, eval_in_queue, eval_out_queue,
+                        done_lock))
+                thread.start()
+                search_threads.append(thread)
+            eval_thread = threading.Thread(target=self.eval_boards_async,
+                args=(eval_in_queue, eval_out_queues))
+            eval_thread.start()
+            eval_thread.join()
+            for thread in search_threads:
+                thread.join()
 
     def move_dist(self):
         policy = np.zeros(action_space_size())
@@ -151,5 +194,7 @@ class MCTSAgent:
 
 if __name__ == "__main__":
     agent = MCTSAgent(True, Policy(), 0.5, 1, 3)
-    agent.search(100)
+    for i in range(10):
+        agent.search(100)
+        print(agent.choose_move())
 

@@ -24,11 +24,12 @@ class GameTreeNode:
         self.children.append(GameTreeNode())
 
 class MCTSAgent:
-    def __init__(self, side, policy, c_puct, tau, n_virtual_loss,
+    def __init__(self, game, side, policy, c_puct, tau, n_virtual_loss,
         use_dirichlet_noise=False):
+        self.game = game
         self.side = side
         self.policy = policy
-        self.board = dotboxes.Board()
+        self.board = game.Board()
         self.root = GameTreeNode()
         self.c_puct = c_puct
         self.tau = tau
@@ -79,17 +80,17 @@ class MCTSAgent:
                 eta = np.random.dirichlet([0.03], len(legal_moves))
             with leaf.lock:
                 for i, move in enumerate(legal_moves):
-                    prior_p = action[move_to_action_idx(move)]
+                    prior_p = action[self.game.move_to_action_idx(move)]
                     if self.use_dirichlet_noise and leaf is self.root:
                         prior_p = 0.75*prior_p + 0.25*eta[i]
                     leaf.add_edge(move, 0, 0, 0, prior_p)
         else:
-            value = reward_for_side(leaf_board, self.side)
+            value = self.game.reward_for_side(leaf_board, self.side)
         # backup
         self.backup(path, value)
 
     def eval_board(self, board):
-        board_t = boards_to_tensor([board])
+        board_t = self.game.boards_to_tensor([board])
         with torch.no_grad():
             action, value = self.policy(board_t)
         action = action.squeeze(0).numpy()
@@ -110,7 +111,7 @@ class MCTSAgent:
                 batch_boards, boards = boards[:batch_size], boards[batch_size:]
                 batch_idxs, idxs = idxs[:batch_size], idxs[batch_size:]
 
-                boards_t = boards_to_tensor(batch_boards)
+                boards_t = self.game.boards_to_tensor(batch_boards)
                 with torch.no_grad():
                     actions, values = self.policy(boards_t)
                 actions = actions.numpy()
@@ -158,15 +159,15 @@ class MCTSAgent:
                 thread.join()
 
     def move_dist(self):
-        policy = np.zeros(action_space_size())
+        policy = np.zeros(self.game.action_space_size())
         if self.tau != 0:
             dist = np.power(self.root.ns, 1 / self.tau)
             dist /= np.sum(dist)
             for p, move in zip(dist, self.root.moves):
-                policy[move_to_action_idx(move)] = p
+                policy[self.game.move_to_action_idx(move)] = p
         else:
             best_idx = np.argmax(self.root.ns)
-            policy[move_to_action_idx(self.root.moves[best_idx])] = 1
+            policy[self.game.move_to_action_idx(self.root.moves[best_idx])] = 1
         return policy
 
     def choose_move(self):
@@ -189,12 +190,17 @@ class MCTSAgent:
         self.board.push(move)
 
     def reset(self):
-        self.board = dotboxes.Board()
+        self.board = self.game.Board()
         self.root = GameTreeNode()
 
 if __name__ == "__main__":
-    agent = MCTSAgent(True, Policy(), 0.5, 1, 3)
+    import games
+    game = games.DotBoxesGame(2, 3)
+    agent = MCTSAgent(game, True, game.Policy(), 0.5, 1, 3)
     for i in range(10):
-        agent.search(100)
+        agent.search(100, n_threads=0)
+        print(agent.choose_move())
+    for i in range(10):
+        agent.search(100, n_threads=8)
         print(agent.choose_move())
 

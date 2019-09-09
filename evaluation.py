@@ -8,10 +8,11 @@ class ModelEvalWorker(mp.Process):
         pass
 
 class ModelEvalManager(mp.Process):
-    def __init__(self, trained_queue, alpha_queue):
+    def __init__(self, game, trained_queue, alpha_queue):
         super(ModelEvalManager, self).__init__()
         self.trained_queue = trained_queue
         self.alpha_queue = alpha_queue
+        self.game = game
 
     def run(self):
         # TODO

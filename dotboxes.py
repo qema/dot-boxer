@@ -1,4 +1,22 @@
+from common import *
 import numpy as np
+
+class Policy(nn.Module):
+    def __init__(self, n_rows, n_cols):
+        super(Policy, self).__init__()
+        self.conv1 = nn.Conv2d(2, 16, 3, padding=1)
+        self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
+        self.conv3 = nn.Conv2d(16, 2, 1)
+        self.fc1 = nn.Linear(2*n_rows*n_cols, 128)
+        self.fc2 = nn.Linear(128, 1)
+
+    def forward(self, board):
+        out = F.relu(self.conv1(board))
+        out = F.relu(self.conv2(out))
+        out = self.conv3(out).view(out.shape[0], -1)
+        action = F.log_softmax(out, dim=1)
+        value = torch.tanh(self.fc2(F.relu(self.fc1(out))))
+        return action, value
 
 class Board:
     def __init__(self, n_rows, n_cols):
@@ -14,7 +32,7 @@ class Board:
             dtype=np.int8)
 
     def clone(self):
-        board = Board()
+        board = Board(self.n_rows, self.n_cols)
         board.edges = np.copy(self.edges)
         board.turn = self.turn
         board.move_stack = list(self.move_stack)
@@ -125,3 +143,10 @@ if __name__ == "__main__":
         assert(movestack1 == movestack2)
         print(board)
     print(board.result())
+
+    policy = Policy()
+    board = Board()
+    board_t = boards_to_tensor([board])
+    action, value = policy(board_t)
+    print(action_idx_to_move(action.argmax()))
+    print(action, value)

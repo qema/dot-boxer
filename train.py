@@ -3,11 +3,12 @@ import threading
 import random
 
 class TrainWorker(mp.Process):
-    def __init__(self, minibatch_queue, notify_queue, policy):
+    def __init__(self, game, minibatch_queue, notify_queue, policy):
         super(TrainWorker, self).__init__()
         self.minibatch_queue = minibatch_queue
         self.notify_queue = notify_queue
         self.policy = policy
+        self.game = game
 
     def run(self):
         opt = optim.SGD(self.policy.parameters(), lr=1e-2, momentum=0.9,
@@ -15,7 +16,7 @@ class TrainWorker(mp.Process):
         #opt = optim.Adam(self.policy.parameters(), lr=1e-2)
         while True:
             boards, dists, rewards = self.minibatch_queue.get()
-            boards_t = boards_to_tensor(boards)
+            boards_t = self.game.boards_to_tensor(boards)
             dists_t = torch.from_numpy(dists).type(torch.float).to(
                 get_device())
             rewards_t = torch.from_numpy(rewards).type(torch.float).to(
@@ -35,14 +36,15 @@ class TrainWorker(mp.Process):
             self.notify_queue.put(loss.item())
 
 class TrainManager(mp.Process):
-    def __init__(self, game_queue, trained_queue, n_workers=1,
+    def __init__(self, game, game_queue, trained_queue, n_workers=1,
         start_t=1000, max_n_games=100000, max_queue_size=8,
         minibatch_size=32, submit_interval=1000):
         super(TrainManager, self).__init__()
+        self.game = game
         self.game_queue = game_queue
         self.trained_queue = trained_queue
         self.game_moves = [None]*max_n_games
-        self.game_dists = np.zeros((max_n_games, action_space_size()),
+        self.game_dists = np.zeros((max_n_games, game.action_space_size()),
             dtype=np.float)
         # rewards are relative to player A
         self.game_rewards = np.zeros(max_n_games, dtype=np.int8)
@@ -120,11 +122,12 @@ class TrainManager(mp.Process):
         get_minibatches_thread.start()
 
         # start train workers
-        self.policy = Policy()
+        self.policy = self.game.Policy()
         notify_queue = mp.Queue()
         workers = []
         for proc_idx in range(self.n_workers):
-            worker = TrainWorker(minibatch_queue, notify_queue, self.policy)
+            worker = TrainWorker(self.game, minibatch_queue, notify_queue,
+                self.policy)
             worker.start()
             workers.append(worker)
 

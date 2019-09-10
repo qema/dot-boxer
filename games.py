@@ -5,9 +5,9 @@ import chess
 class DotBoxesPolicy(nn.Module):
     def __init__(self, n_rows, n_cols):
         super(DotBoxesPolicy, self).__init__()
-        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
-        self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
-        self.conv3 = nn.Conv2d(16, 2, 1)
+        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
+        self.conv3 = nn.Conv2d(64, 2, 1)
         self.fc1 = nn.Linear(2*n_rows*n_cols, 128)
         self.fc2 = nn.Linear(128, 1)
 

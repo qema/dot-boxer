@@ -45,21 +45,26 @@ class SelfPlayWorker(mp.Process):
             self.game_queue.put((moves, dists, reward))
 
 class SelfPlayManager(mp.Process):
-    def __init__(self, game, alpha_queue, game_queue):
+    def __init__(self, game, alpha_queue, game_queue, n_workers=1):
         super(SelfPlayManager, self).__init__()
         self.alpha_queue = alpha_queue
         self.game_queue = game_queue
         self.game = game
+        self.n_workers = n_workers
 
     def run(self):
         policy = self.game.Policy()
         policy.share_memory()
 
-        search_worker = SelfPlayWorker(self.game, self.game_queue, policy)
-        search_worker.start()
+        search_workers = []
+        for i in range(self.n_workers):
+            search_worker = SelfPlayWorker(self.game, self.game_queue, policy)
+            search_worker.start()
+            search_workers.append(search_worker)
 
         while True:
             alpha = self.alpha_queue.get()
             policy.load_state_dict(alpha)
 
-        search_worker.join()
+        for search_worker in search_workers:
+            search_worker.join()

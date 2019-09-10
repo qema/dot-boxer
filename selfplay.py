@@ -15,6 +15,7 @@ class SelfPlayWorker(mp.Process):
             use_dirichlet_noise=True)
         agent_b = MCTSAgent(self.game, False, self.policy, 1,
             use_dirichlet_noise=True)
+        n_games_played = 0
         while True:
             board = self.game.Board()
             agent_a.tau = 1
@@ -43,6 +44,8 @@ class SelfPlayWorker(mp.Process):
             dists = np.stack(dists)
             reward = self.game.reward_for_side(board, True)
             self.game_queue.put((moves, dists, reward))
+            n_games_played += 1
+            debug_log(self, "completed {} games".format(n_games_played))
 
 class SelfPlayManager(mp.Process):
     def __init__(self, game, game_queue, policy, n_workers=1):

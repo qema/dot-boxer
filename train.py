@@ -71,7 +71,7 @@ class TrainManager(mp.Process):
             self.total_n_moves += len(moves)
             if self.game_next_free_idx >= self.start_t and \
                 not has_games_event.is_set():
-                print("start training")
+                debug_log(self, "start training")
                 has_games_event.set()
 
     def get_minibatches(self, has_games_event, minibatch_queue):
@@ -107,7 +107,7 @@ class TrainManager(mp.Process):
             loss = notify_queue.get()
             if t % self.save_interval == 0:
                 torch.save(self.policy.state_dict(), "models/alpha.pt")
-                print("save {:.6f}".format(loss))
+                debug_log(self, "save {:.6f}".format(loss))
             t += 1
 
     def run(self):

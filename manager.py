@@ -6,7 +6,7 @@ from games import *
 if __name__ == "__main__":
     mp.set_start_method("spawn")
 
-    game = DotBoxesGame(2, 3)
+    game = DotBoxesGame(5, 5)
     #game = ChessGame()
 
     policy = game.Policy()

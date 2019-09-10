@@ -13,3 +13,10 @@ def get_device():
         device_cache = torch.device("cuda" if torch.cuda.is_available() else
             "cpu")
     return device_cache
+
+def debug_log(name, *args):
+    print(str(name), end=" ")
+    print(*args)
+
+if __name__ == "__main__":
+    debug_log("Andrew", 1, 2, 3)

@@ -7,14 +7,17 @@ class DotBoxesPolicy(nn.Module):
         super(DotBoxesPolicy, self).__init__()
         self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
         self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
-        self.conv3 = nn.Conv2d(64, 2, 1)
+        self.conv3 = nn.Conv2d(64, 64, 3, padding=1)
+        self.conv4 = nn.Conv2d(64, 2, 1)
         self.fc1 = nn.Linear(2*n_rows*n_cols, 128)
         self.fc2 = nn.Linear(128, 1)
 
     def forward(self, board):
         out = F.relu(self.conv1(board))
         out = F.relu(self.conv2(out))
-        out = self.conv3(out).view(out.shape[0], -1)
+        out = F.relu(self.conv3(out))
+        out = self.conv4(out)
+        out = out.view(out.shape[0], -1)
         action = F.log_softmax(out, dim=1)
         value = torch.tanh(self.fc2(F.relu(self.fc1(out))))
         return action, value

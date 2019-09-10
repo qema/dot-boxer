@@ -1,4 +1,3 @@
-import dotboxes
 from common import *
 from selfplay import *
 from train import *
@@ -8,7 +7,8 @@ from games import *
 if __name__ == "__main__":
     mp.set_start_method("spawn")
 
-    game = DotBoxesGame(2, 3)
+    #game = DotBoxesGame(2, 3)
+    game = ChessGame()
 
     game_queue = mp.Queue()
     trained_queue = mp.Queue()

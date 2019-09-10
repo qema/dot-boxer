@@ -38,7 +38,7 @@ class MCTSAgent:
 
     def select(self):
         cur = self.root
-        board = self.board.clone()
+        board = self.board.copy()
         path = []
         while cur.children:
             with cur.lock:

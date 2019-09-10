@@ -36,10 +36,12 @@ class SelfPlayWorker(mp.Process):
                 agent_a.commit_move(move)
                 agent_b.commit_move(move)
                 print(board)
+                print()
                 t += 1
             agent_a.reset()
             agent_b.reset()
-            self.game_queue.put((moves, dists, np.sign(board.result())))
+            reward = self.game.reward_for_side(board, True)
+            self.game_queue.put((moves, dists, reward))
 
 class SelfPlayManager(mp.Process):
     def __init__(self, game, alpha_queue, game_queue):

@@ -37,21 +37,21 @@ class TrainWorker(mp.Process):
 
 class TrainManager(mp.Process):
     def __init__(self, game, game_queue, trained_queue, n_workers=1,
-        start_t=1000, max_n_games=100000, max_queue_size=8,
+        start_t=10, buffer_size=1000, max_queue_size=8,
         minibatch_size=32, submit_interval=1000):
         super(TrainManager, self).__init__()
         self.game = game
         self.game_queue = game_queue
         self.trained_queue = trained_queue
-        self.game_moves = [None]*max_n_games
-        self.game_dists = np.zeros((max_n_games, game.action_space_size()),
+        self.game_moves = [None]*buffer_size
+        self.game_dists = np.zeros((buffer_size, game.action_space_size()),
             dtype=np.float)
         # rewards are relative to player A
-        self.game_rewards = np.zeros(max_n_games, dtype=np.int8)
-        self.game_starts = np.zeros(max_n_games, dtype=np.int8)
+        self.game_rewards = np.zeros(buffer_size, dtype=np.int8)
+        self.game_starts = np.zeros(buffer_size, dtype=np.int8)
         self.game_next_free_idx = 0
         self.start_t = start_t
-        self.max_n_games = max_n_games
+        self.buffer_size = buffer_size
         self.n_workers = n_workers
         self.max_queue_size = max_queue_size
         self.minibatch_size = minibatch_size
@@ -61,9 +61,9 @@ class TrainManager(mp.Process):
         while True:
             moves, dists, reward = self.game_queue.get()
             self.game_rewards[self.game_next_free_idx %
-                self.max_n_games] = reward
+                self.buffer_size] = reward
             for i, (move, dist) in enumerate(zip(moves, dists)):
-                idx = self.game_next_free_idx % self.max_n_games
+                idx = self.game_next_free_idx % self.buffer_size
                 self.game_moves[idx] = move
                 self.game_dists[idx] = dist
                 self.game_starts[idx] = True if i == 0 else False
@@ -77,20 +77,20 @@ class TrainManager(mp.Process):
         has_games_event.wait()
         while True:
             top = (self.game_next_free_idx if self.game_next_free_idx <
-                self.max_n_games else self.max_n_games)
+                self.buffer_size else self.buffer_size)
             idxs = random.sample(range(top), self.minibatch_size)
             boards, dists, rewards = [], [], []
             for idx in idxs:
-                board = dotboxes.Board()
+                board = self.game.Board()
                 move_stack = []
                 cur = idx
-                dist = self.game_dists[cur % self.max_n_games]
-                while not self.game_starts[cur % self.max_n_games]:
+                dist = self.game_dists[cur % self.buffer_size]
+                while not self.game_starts[cur % self.buffer_size]:
                     cur -= 1
-                    move_stack.append(self.game_moves[cur % self.max_n_games])
+                    move_stack.append(self.game_moves[cur % self.buffer_size])
                 for move in reversed(move_stack):
                     board.push(move)
-                reward = self.game_rewards[cur % self.max_n_games]
+                reward = self.game_rewards[cur % self.buffer_size]
                 reward *= (1 if board.turn else -1)
                 boards.append(board)
                 dists.append(dist)
@@ -112,13 +112,13 @@ class TrainManager(mp.Process):
         # check for new games thread
         has_games_event = threading.Event()
         new_games_thread = threading.Thread(target=self.retrieve_new_games,
-            args=(has_games_event,), daemon=True)
+            args=(has_games_event,))
         new_games_thread.start()
 
         # make minibatches thread
         minibatch_queue = mp.Queue(self.max_queue_size)
         get_minibatches_thread = threading.Thread(target=self.get_minibatches,
-            args=(has_games_event, minibatch_queue), daemon=True)
+            args=(has_games_event, minibatch_queue))
         get_minibatches_thread.start()
 
         # start train workers

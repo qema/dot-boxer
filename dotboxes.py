@@ -1,23 +1,6 @@
 from common import *
 import numpy as np
 
-class Policy(nn.Module):
-    def __init__(self, n_rows, n_cols):
-        super(Policy, self).__init__()
-        self.conv1 = nn.Conv2d(2, 16, 3, padding=1)
-        self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
-        self.conv3 = nn.Conv2d(16, 2, 1)
-        self.fc1 = nn.Linear(2*n_rows*n_cols, 128)
-        self.fc2 = nn.Linear(128, 1)
-
-    def forward(self, board):
-        out = F.relu(self.conv1(board))
-        out = F.relu(self.conv2(out))
-        out = self.conv3(out).view(out.shape[0], -1)
-        action = F.log_softmax(out, dim=1)
-        value = torch.tanh(self.fc2(F.relu(self.fc1(out))))
-        return action, value
-
 class Board:
     def __init__(self, n_rows, n_cols):
         self.n_rows = n_rows
@@ -31,7 +14,7 @@ class Board:
         self.ownership = np.zeros((self.n_rows - 1, self.n_cols - 1),
             dtype=np.int8)
 
-    def clone(self):
+    def copy(self):
         board = Board(self.n_rows, self.n_cols)
         board.edges = np.copy(self.edges)
         board.turn = self.turn
@@ -116,7 +99,7 @@ class Board:
                     row < self.n_rows - 1 and col < self.n_cols - 1 else ""
                 s += "{}{}".format("|" if self.edges[0][row][col] else " ", o)
             s += "\n"
-        return s
+        return s[:-1]
 
 if __name__ == "__main__":
     import random

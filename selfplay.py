@@ -40,6 +40,7 @@ class SelfPlayWorker(mp.Process):
                 t += 1
             agent_a.reset()
             agent_b.reset()
+            dists = np.stack(dists)
             reward = self.game.reward_for_side(board, True)
             self.game_queue.put((moves, dists, reward))
 

@@ -44,11 +44,11 @@ class TrainManager(mp.Process):
         self.game_queue = game_queue
         self.trained_queue = trained_queue
         self.game_moves = [None]*buffer_size
-        self.game_dists = np.zeros((buffer_size, game.action_space_size()),
-            dtype=np.float)
+        self.game_dists = [None]*buffer_size
+        self.game_starts = {}
+        self.total_n_moves = 0
         # rewards are relative to player A
         self.game_rewards = np.zeros(buffer_size, dtype=np.int8)
-        self.game_starts = np.zeros(buffer_size, dtype=np.int8)
         self.game_next_free_idx = 0
         self.start_t = start_t
         self.buffer_size = buffer_size
@@ -60,14 +60,15 @@ class TrainManager(mp.Process):
     def retrieve_new_games(self, has_games_event):
         while True:
             moves, dists, reward = self.game_queue.get()
-            self.game_rewards[self.game_next_free_idx %
-                self.buffer_size] = reward
-            for i, (move, dist) in enumerate(zip(moves, dists)):
-                idx = self.game_next_free_idx % self.buffer_size
-                self.game_moves[idx] = move
-                self.game_dists[idx] = dist
-                self.game_starts[idx] = True if i == 0 else False
-                self.game_next_free_idx += 1
+            idx = self.game_next_free_idx % self.buffer_size
+            if self.game_moves[idx] is not None:
+                self.total_n_moves -= len(self.game_moves[idx])
+            self.game_rewards[idx] = reward
+            self.game_moves[idx] = moves
+            self.game_dists[idx] = dists
+            self.game_starts[self.total_n_moves] = idx
+            self.game_next_free_idx += 1
+            self.total_n_moves += len(moves)
             if self.game_next_free_idx >= self.start_t and \
                 not has_games_event.is_set():
                 print("start training")
@@ -76,21 +77,22 @@ class TrainManager(mp.Process):
     def get_minibatches(self, has_games_event, minibatch_queue):
         has_games_event.wait()
         while True:
-            top = (self.game_next_free_idx if self.game_next_free_idx <
-                self.buffer_size else self.buffer_size)
-            idxs = random.sample(range(top), self.minibatch_size)
+            move_idxs = random.sample(range(self.total_n_moves),
+                self.minibatch_size)
             boards, dists, rewards = [], [], []
-            for idx in idxs:
+            for move_idx in move_idxs:
                 board = self.game.Board()
                 move_stack = []
-                cur = idx
-                dist = self.game_dists[cur % self.buffer_size]
-                while not self.game_starts[cur % self.buffer_size]:
+                cur = move_idx
+                # TODO: speed up
+                while cur not in self.game_starts:
                     cur -= 1
-                    move_stack.append(self.game_moves[cur % self.buffer_size])
-                for move in reversed(move_stack):
+                idx = self.game_starts[cur]
+                offset = move_idx - cur
+                dist = self.game_dists[idx][offset]
+                for move in self.game_moves[idx][:offset]:
                     board.push(move)
-                reward = self.game_rewards[cur % self.buffer_size]
+                reward = self.game_rewards[idx]
                 reward *= (1 if board.turn else -1)
                 boards.append(board)
                 dists.append(dist)

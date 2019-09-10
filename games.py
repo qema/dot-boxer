@@ -5,7 +5,7 @@ import chess
 class DotBoxesPolicy(nn.Module):
     def __init__(self, n_rows, n_cols):
         super(DotBoxesPolicy, self).__init__()
-        self.conv1 = nn.Conv2d(2, 16, 3, padding=1)
+        self.conv1 = nn.Conv2d(3, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
         self.conv3 = nn.Conv2d(16, 2, 1)
         self.fc1 = nn.Linear(2*n_rows*n_cols, 128)
@@ -30,11 +30,18 @@ class DotBoxesGame:
     def Policy(self):
         return DotBoxesPolicy(self.n_rows, self.n_cols)
 
+    def bin_feat_plane(self, v):
+        return (torch.ones(1, self.n_rows, self.n_cols, device=get_device())
+            if v else torch.zeros(1, self.n_rows, self.n_cols,
+                device=get_device()))
+
     def boards_to_tensor(self, boards):
         boards_t = []
         for board in boards:
-            boards_t.append(torch.from_numpy(board.edges).type(
-                torch.float).to(get_device()))
+            board_t = torch.from_numpy(board.edges).type(
+                torch.float).to(get_device())
+            board_t = torch.cat((board_t, self.bin_feat_plane(board.turn)))
+            boards_t.append(board_t)
         return torch.stack(boards_t)
 
     def action_space_size(self):
@@ -57,9 +64,9 @@ class DotBoxesGame:
         return np.sign(board.result()) * (1 if side else -1)
 
 class ChessPolicy(nn.Module):
-    def __init__(self):
+    def __init__(self, move_hist_len):
         super(ChessPolicy, self).__init__()
-        self.conv1 = nn.Conv2d(12, 16, 3, padding=1)
+        self.conv1 = nn.Conv2d(12*move_hist_len + 5, 16, 3, padding=1)
         self.conv2 = nn.Conv2d(16, 16, 3, padding=1)
         self.conv3 = nn.Conv2d(16, 2, 3, padding=1)
         self.fc1_action = nn.Linear(2*8*8, 64*64)
@@ -76,27 +83,48 @@ class ChessPolicy(nn.Module):
         return action, value
 
 class ChessGame:
-    def __init__(self):
+    def __init__(self, move_hist_len=6):
         self.reward_dict = {"1-0": 1, "0-1": -1, "1/2-1/2": 0, "*": 0}
+        self.move_hist_len = move_hist_len
 
     def Board(self):
         return chess.Board()
 
     def Policy(self):
-        return ChessPolicy()
+        return ChessPolicy(self.move_hist_len)
+
+    def bin_feat_plane(self, v):
+        return (torch.ones(1, 8, 8, device=get_device()) if v else
+            torch.zeros(1, 8, 8, device=get_device()))
 
     def board_to_tensor(self, state):
         board = state
         side = board.turn
         piece_map = board.piece_map()
 
-        pieces_t = torch.zeros(12, 8, 8, device=get_device())
-        for pos, piece in piece_map.items():
-            col, row = chess.square_file(pos), chess.square_rank(pos)
-            idx = int(piece.color != side)*6 + (piece.piece_type-1)
-            pieces_t[idx][row][col] = 1
+        move_hist = []
+        pieces_t = torch.zeros(12*self.move_hist_len, 8, 8,
+            device=get_device())
+        for hist_idx in range(self.move_hist_len):
+            if len(board.move_stack) > 0:
+                for pos, piece in piece_map.items():
+                    col, row = chess.square_file(pos), chess.square_rank(pos)
+                    idx = int(piece.color != side)*6 + (piece.piece_type-1)
+                    pieces_t[12*hist_idx + idx][row][col] = 1
+                move_hist.append(board.pop())
+        for move in reversed(move_hist):
+            board.push(move)
 
-        board_t = pieces_t
+        color_t = self.bin_feat_plane(side)
+        kw_t = self.bin_feat_plane(board.has_kingside_castling_rights(
+            chess.WHITE))
+        qw_t = self.bin_feat_plane(board.has_queenside_castling_rights(
+            chess.WHITE))
+        kb_t = self.bin_feat_plane(board.has_kingside_castling_rights(
+            chess.BLACK))
+        qb_t = self.bin_feat_plane(board.has_queenside_castling_rights(
+            chess.BLACK))
+        board_t = torch.cat((pieces_t, color_t, kw_t, qw_t, kb_t, qb_t))
         return board_t
 
     # input: list of fens

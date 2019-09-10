@@ -11,9 +11,9 @@ class SelfPlayWorker(mp.Process):
         self.policy = policy
 
     def run(self):
-        agent_a = MCTSAgent(self.game, True, self.policy, 0.5, 1, 3,
+        agent_a = MCTSAgent(self.game, True, self.policy, 1,
             use_dirichlet_noise=False)
-        agent_b = MCTSAgent(self.game, False, self.policy, 0.5, 1, 3,
+        agent_b = MCTSAgent(self.game, False, self.policy, 1,
             use_dirichlet_noise=False)
         while True:
             board = self.game.Board()
@@ -35,8 +35,8 @@ class SelfPlayWorker(mp.Process):
                 board.push(move)
                 agent_a.commit_move(move)
                 agent_b.commit_move(move)
-                print(board)
-                print()
+                #print(board)
+                #print()
                 t += 1
             agent_a.reset()
             agent_b.reset()

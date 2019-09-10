@@ -7,7 +7,7 @@ from games import *
 if __name__ == "__main__":
     mp.set_start_method("spawn")
 
-    game = DotBoxesGame(5, 5)
+    game = DotBoxesGame(4, 4)
     #game = ChessGame()
 
     game_queue = mp.Queue()

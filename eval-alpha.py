@@ -4,7 +4,7 @@ import dotboxes
 import numpy as np
 from scipy.stats import ttest_1samp
 
-game = DotBoxesGame(2, 3)
+game = DotBoxesGame(4, 4)
 good_policy = game.Policy()
 good_policy.load_state_dict(torch.load("models/alpha.pt",
     map_location=get_device()))
@@ -13,15 +13,15 @@ rewards = []
 for game_num in range(100):
     a_side = game_num % 2 == 0
     # TODO: hyperparams?
-    agent_a = MCTSAgent(game, a_side, good_policy, 0.0, 0, 3)
-    agent_b = MCTSAgent(game, not a_side, game.Policy(), 0, 0.0, 0, 3)
+    agent_a = MCTSAgent(game, a_side, good_policy, 0, c_puct=0)
+    agent_b = MCTSAgent(game, not a_side, game.Policy(), 0, c_puct=0)
 
     board = game.Board()
     t = 0
     moves, dists = [], []
     while not board.is_game_over():
         agent = agent_a if board.turn == a_side else agent_b
-        agent.tau = 1
+        agent.tau = 0
         agent.search(100)
         move = agent.choose_move()
         #if board.turn == a_side:

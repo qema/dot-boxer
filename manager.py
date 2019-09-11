@@ -9,15 +9,13 @@ if __name__ == "__main__":
     game = DotBoxesGame(5, 5)
     #game = ChessGame()
 
-    policy = game.Policy()
-    policy.share_memory()
-
     game_queue = mp.Queue()
+    trained_queue = mp.Queue()
 
-    self_play_manager = SelfPlayManager(game, game_queue, policy)
+    self_play_manager = SelfPlayManager(game, game_queue, trained_queue)
     self_play_manager.start()
 
-    train_manager = TrainManager(game, game_queue, policy)
+    train_manager = TrainManager(game, game_queue, trained_queue)
     train_manager.start()
 
     self_play_manager.join()

@@ -4,7 +4,7 @@ import dotboxes
 import numpy as np
 from scipy.stats import ttest_1samp
 
-game = DotBoxesGame(5, 5)
+game = DotBoxesGame(2, 3)
 good_policy = game.Policy()
 good_policy.load_state_dict(torch.load("models/alpha.pt",
     map_location=get_device()))
@@ -22,7 +22,7 @@ for game_num in range(100):
     while not board.is_game_over():
         agent = agent_a if board.turn == a_side else agent_b
         agent.tau = 0
-        agent.search(10)
+        agent.search(100)
         move = agent.choose_move()
         #if board.turn == a_side:
         #    move = agent.best_move()

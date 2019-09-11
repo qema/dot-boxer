@@ -196,7 +196,9 @@ class MCTSAgent:
 if __name__ == "__main__":
     import games
     game = games.DotBoxesGame(2, 3)
-    agent = MCTSAgent(game, True, game.Policy(), 0.5, 1, 3)
+    policy = game.Policy()
+    policy.to(get_device())
+    agent = MCTSAgent(game, True, policy, 0.5, 1, 3)
     for i in range(10):
         agent.search(100, n_threads=0)
         print(agent.choose_move())

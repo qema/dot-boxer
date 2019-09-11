@@ -48,20 +48,26 @@ class SelfPlayWorker(mp.Process):
             debug_log(self.name, "completed {} games".format(n_games_played))
 
 class SelfPlayManager(mp.Process):
-    def __init__(self, game, game_queue, policy, n_workers=1):
+    def __init__(self, game, game_queue, trained_queue, n_workers=1):
         super(SelfPlayManager, self).__init__()
         self.game_queue = game_queue
-        self.policy = policy
+        self.trained_queue = trained_queue
         self.game = game
         self.n_workers = n_workers
 
     def run(self):
+        self.policy = self.game.Policy()
+        self.policy.share_memory()
+
         search_workers = []
         for i in range(self.n_workers):
             search_worker = SelfPlayWorker(self.game, self.game_queue,
                 self.policy)
             search_worker.start()
             search_workers.append(search_worker)
+
+        while True:
+            self.policy = self.trained_queue.get()
 
         for search_worker in search_workers:
             search_worker.join()

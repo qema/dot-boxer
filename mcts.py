@@ -93,7 +93,7 @@ class MCTSAgent:
         board_t = self.game.boards_to_tensor([board])
         with torch.no_grad():
             action, value = self.policy(board_t)
-        action = action.squeeze(0).numpy()
+        action = action.squeeze(0).cpu().numpy()
         value = value[0].item()
         value *= (1 if self.side == board.turn else -1)
         return action, value
@@ -114,8 +114,8 @@ class MCTSAgent:
                 boards_t = self.game.boards_to_tensor(batch_boards)
                 with torch.no_grad():
                     actions, values = self.policy(boards_t)
-                actions = actions.numpy()
-                values = values.numpy()
+                actions = actions.cpu().numpy()
+                values = values.cpu().numpy()
                 for i in range(len(actions)):
                     v = values[i][0] * (1 if self.side == batch_boards[i].turn
                         else -1)

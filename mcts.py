@@ -24,7 +24,7 @@ class GameTreeNode:
         self.children.append(GameTreeNode())
 
 class MCTSAgent:
-    def __init__(self, game, side, policy, tau, c_puct=0.5, n_virtual_loss=3,
+    def __init__(self, game, side, policy, tau, c_puct=5, n_virtual_loss=3,
         use_dirichlet_noise=False):
         self.game = game
         self.side = side

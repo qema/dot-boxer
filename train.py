@@ -37,7 +37,7 @@ class TrainWorker(mp.Process):
 
 class TrainManager(mp.Process):
     def __init__(self, game, game_queue, policy, n_workers=1,
-        start_t=10000, buffer_size=10000, max_queue_size=8,
+        start_t=1000, buffer_size=10000, max_queue_size=8,
         minibatch_size=32, save_interval=1000):
         super(TrainManager, self).__init__()
         self.game = game

@@ -126,6 +126,7 @@ class TrainManager(mp.Process):
 
         # start train workers
         self.policy = self.game.Policy()
+        self.policy.to(get_device())
         self.policy.share_memory()
         notify_queue = mp.Queue()
         workers = []

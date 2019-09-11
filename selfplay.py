@@ -57,6 +57,7 @@ class SelfPlayManager(mp.Process):
 
     def run(self):
         self.policy = self.game.Policy()
+        self.policy.to(get_device())
         self.policy.share_memory()
 
         search_workers = []

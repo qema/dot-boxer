@@ -2,7 +2,7 @@ from mcts import *
 
 class SelfPlayWorker(mp.Process):
     def __init__(self, game, game_queue, policy, zero_temp_t=10,
-        n_search_steps=100):
+        n_search_steps=1000):
         super(SelfPlayWorker, self).__init__()
         self.game = game
         self.zero_temp_t = zero_temp_t

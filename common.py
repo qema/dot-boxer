@@ -15,8 +15,7 @@ def get_device():
     return device_cache
 
 def debug_log(name, *args):
-    print(str(name), end=" ")
-    print(*args)
+    print(name, *args)
 
 if __name__ == "__main__":
     debug_log("Andrew", 1, 2, 3)

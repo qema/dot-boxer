@@ -37,7 +37,7 @@ class TrainWorker(mp.Process):
 
 class TrainManager(mp.Process):
     def __init__(self, game, game_queue, policy, n_workers=1,
-        start_t=1000, buffer_size=10000, max_queue_size=8,
+        start_t=10000, buffer_size=10000, max_queue_size=8,
         minibatch_size=32, save_interval=1000):
         super(TrainManager, self).__init__()
         self.game = game
@@ -71,7 +71,7 @@ class TrainManager(mp.Process):
             self.total_n_moves += len(moves)
             if self.game_next_free_idx >= self.start_t and \
                 not has_games_event.is_set():
-                debug_log(self, "start training")
+                debug_log(self.name, "start training")
                 has_games_event.set()
 
     def get_minibatches(self, has_games_event, minibatch_queue):
@@ -107,7 +107,7 @@ class TrainManager(mp.Process):
             loss = notify_queue.get()
             if t % self.save_interval == 0:
                 torch.save(self.policy.state_dict(), "models/alpha.pt")
-                debug_log(self, "save {:.6f}".format(loss))
+                debug_log(self.name, "save {:.6f}".format(loss))
             t += 1
 
     def run(self):

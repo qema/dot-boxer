@@ -4,7 +4,7 @@ import dotboxes
 import numpy as np
 from scipy.stats import ttest_1samp
 
-game = DotBoxesGame(4, 4)
+game = DotBoxesGame(5, 5)
 good_policy = game.Policy()
 good_policy.load_state_dict(torch.load("models/alpha.pt",
     map_location=get_device()))

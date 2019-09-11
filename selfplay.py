@@ -23,6 +23,7 @@ class SelfPlayWorker(mp.Process):
             t = 0
             moves, dists = [], []
             while not board.is_game_over():
+                print(torch.sum(self.policy.conv1.weight))
                 #if t == self.zero_temp_t:
                 #    agent_a.tau = 0
                 #    agent_b.tau = 0
@@ -45,10 +46,10 @@ class SelfPlayWorker(mp.Process):
             reward = self.game.reward_for_side(board, True)
             self.game_queue.put((moves, dists, reward))
             n_games_played += 1
-            debug_log(self, "completed {} games".format(n_games_played))
+            debug_log(self.name, "completed {} games".format(n_games_played))
 
 class SelfPlayManager(mp.Process):
-    def __init__(self, game, game_queue, policy, n_workers=1):
+    def __init__(self, game, game_queue, policy, n_workers=2):
         super(SelfPlayManager, self).__init__()
         self.game_queue = game_queue
         self.policy = policy

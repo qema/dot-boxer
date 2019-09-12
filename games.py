@@ -5,7 +5,7 @@ import chess
 class DotBoxesPolicy(nn.Module):
     def __init__(self, n_rows, n_cols):
         super(DotBoxesPolicy, self).__init__()
-        self.conv1 = nn.Conv2d(3, 64, 3, padding=1)
+        self.conv1 = nn.Conv2d(4, 64, 3, padding=1)
         self.conv2 = nn.Conv2d(64, 64, 3, padding=1)
         self.conv3 = nn.Conv2d(64, 64, 3, padding=1)
         self.conv4 = nn.Conv2d(64, 2, 1)
@@ -43,7 +43,12 @@ class DotBoxesGame:
         for board in boards:
             board_t = torch.from_numpy(board.edges).type(
                 torch.float).to(get_device())
-            board_t = torch.cat((board_t, self.bin_feat_plane(board.turn)))
+            own = np.zeros((1, self.n_rows, self.n_cols))
+            own[0,:self.n_rows-1,:self.n_cols-1] = board.ownership
+            own_t = torch.from_numpy(own).type(
+                torch.float).to(get_device())
+            board_t = torch.cat((board_t, own_t,
+                self.bin_feat_plane(board.turn)))
             boards_t.append(board_t)
         return torch.stack(boards_t)
 

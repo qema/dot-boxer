@@ -5,6 +5,7 @@ from games import *
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
+    clear_debug_log()
 
     game = DotBoxesGame(5, 5)
     #game = ChessGame()

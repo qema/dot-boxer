@@ -1,0 +1,33 @@
+SelfPlayWorker-1:1 completed 1 games
+SelfPlayWorker-1:1 completed 2 games
+SelfPlayWorker-1:1 completed 3 games
+SelfPlayWorker-1:1 completed 4 games
+SelfPlayWorker-1:1 completed 5 games
+SelfPlayWorker-1:1 completed 6 games
+SelfPlayWorker-1:1 completed 7 games
+SelfPlayWorker-1:1 completed 8 games
+SelfPlayWorker-1:1 completed 9 games
+SelfPlayWorker-1:1 completed 10 games
+TrainManager-2 start training
+TrainManager-2 Saved model. MSE: 1.002680, CE: 3.909871
+TrainManager-2 Saved model. MSE: 1.989258, CE: 7.811629
+TrainManager-2 Saved model. MSE: 2.937009, CE: 11.696010
+TrainManager-2 Saved model. MSE: 3.780033, CE: 15.555274
+TrainManager-2 Saved model. MSE: 4.591894, CE: 19.400118
+TrainManager-2 Saved model. MSE: 5.370937, CE: 23.225418
+TrainManager-2 Saved model. MSE: 6.080143, CE: 27.030382
+TrainManager-2 Saved model. MSE: 6.944020, CE: 30.799585
+TrainManager-2 Saved model. MSE: 7.789855, CE: 34.509993
+TrainManager-2 Saved model. MSE: 8.622326, CE: 38.173084
+TrainManager-2 Saved model. MSE: 9.346594, CE: 41.718697
+TrainManager-2 Saved model. MSE: 9.980102, CE: 45.195962
+TrainManager-2 Saved model. MSE: 10.646067, CE: 48.578290
+TrainManager-2 Saved model. MSE: 11.194927, CE: 51.860049
+TrainManager-2 Saved model. MSE: 11.544320, CE: 55.009671
+TrainManager-2 Saved model. MSE: 11.781036, CE: 58.160224
+TrainManager-2 Saved model. MSE: 12.007387, CE: 61.283996
+TrainManager-2 Saved model. MSE: 12.137519, CE: 64.300918
+TrainManager-2 Saved model. MSE: 12.233630, CE: 67.235573
+TrainManager-2 Saved model. MSE: 12.314352, CE: 70.163452
+TrainManager-2 Saved model. MSE: 12.398531, CE: 73.101722
+TrainManager-2 Saved model. MSE: 12.492476, CE: 76.079024

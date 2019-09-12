@@ -29,15 +29,16 @@ class TrainWorker(mp.Process):
             ce_loss = (action * dists_t).sum(dim=1)
             ce_loss = -torch.mean(ce_loss)
             #print(ce_loss.item(), F.mse_loss(value, rewards_t).item())
-            loss = F.mse_loss(value, rewards_t) + ce_loss
+            mse_loss = F.mse_loss(value, rewards_t)
+            loss = mse_loss + ce_loss
             loss.backward()
             opt.step()
 
-            self.notify_queue.put(loss.item())
+            self.notify_queue.put((mse_loss.item(), ce_loss.item()))
 
 class TrainManager(mp.Process):
     def __init__(self, game, game_queue, trained_queue, n_workers=1,
-        start_t=1000, buffer_size=10000, max_queue_size=8,
+        start_t=1000, buffer_size=100000, max_queue_size=8,
         minibatch_size=32, save_interval=1000):
         super(TrainManager, self).__init__()
         self.game = game
@@ -103,13 +104,23 @@ class TrainManager(mp.Process):
 
     def submit_models(self, notify_queue):
         t = 0
+        running_mse_loss, running_ce_loss = 0, 0
         while True:
-            loss = notify_queue.get()
+            mse_loss, ce_loss = notify_queue.get()
+            running_mse_loss += mse_loss
+            running_ce_loss += ce_loss
             self.trained_queue.put(self.policy)
+            t += 1
             if t % self.save_interval == 0:
                 torch.save(self.policy.state_dict(), "models/alpha.pt")
-                debug_log(self.name, "save {:.6f}".format(loss))
-            t += 1
+                debug_log(self.name,
+                    "Saved model. MSE: {:.6f}, CE: {:.6f}".format(
+                        running_mse_loss / self.save_interval,
+                        running_ce_loss / self.save_interval))
+                running_loss = 0
+            if t % 10*self.save_interval == 0:
+                torch.save(self.policy.state_dict(),
+                    "models/alpha-{}.pt".format(t))
 
     def run(self):
         # check for new games thread

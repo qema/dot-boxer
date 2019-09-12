@@ -14,8 +14,13 @@ def get_device():
             "cpu")
     return device_cache
 
+def clear_debug_log():
+    open("log.txt", "w").close()
+
 def debug_log(name, *args):
     print(name, *args)
+    with open("log.txt", "a") as f:
+        print(name, *args, file=f)
 
 if __name__ == "__main__":
     debug_log("Andrew", 1, 2, 3)

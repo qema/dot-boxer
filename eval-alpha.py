@@ -6,6 +6,7 @@ from scipy.stats import ttest_1samp
 
 game = DotBoxesGame(3, 3)
 good_policy = game.Policy()
+good_policy.to(get_device())
 good_policy.load_state_dict(torch.load("models/alpha.pt",
     map_location=get_device()))
 
@@ -14,7 +15,9 @@ for game_num in range(100):
     a_side = game_num % 2 == 0
     # TODO: hyperparams?
     agent_a = MCTSAgent(game, a_side, good_policy, 0, c_puct=5)
-    agent_b = MCTSAgent(game, not a_side, game.Policy(), 0, c_puct=5)
+    bad_policy = game.Policy()
+    bad_policy.to(get_device())
+    agent_b = MCTSAgent(game, not a_side, bad_policy, 0, c_puct=5)
 
     board = game.Board()
     t = 0

@@ -118,6 +118,7 @@ class TrainManager(mp.Process):
                         running_mse_loss / self.save_interval,
                         running_ce_loss / self.save_interval))
                 running_loss = 0
+                running_mse_loss, running_ce_loss = 0, 0
             if t % 10*self.save_interval == 0:
                 torch.save(self.policy.state_dict(),
                     "models/alpha-{}.pt".format(t))

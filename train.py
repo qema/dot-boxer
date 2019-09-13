@@ -15,7 +15,10 @@ class TrainWorker(mp.Process):
             weight_decay=1e-4)
         #opt = optim.Adam(self.policy.parameters(), lr=1e-2)
         while True:
-            boards, dists, rewards = self.minibatch_queue.get()
+            boards, dists, rewards, lr = self.minibatch_queue.get()
+            for param_group in opt.param_groups:
+                param_group["lr"] = lr
+
             boards_t = self.game.boards_to_tensor(boards)
             dists_t = torch.from_numpy(dists).type(torch.float).to(
                 get_device())
@@ -77,6 +80,7 @@ class TrainManager(mp.Process):
 
     def get_minibatches(self, has_games_event, minibatch_queue):
         has_games_event.wait()
+        n_steps = 0
         while True:
             move_idxs = random.sample(range(self.total_n_moves),
                 self.minibatch_size)
@@ -100,7 +104,15 @@ class TrainManager(mp.Process):
                 rewards.append(reward)
             dists = np.stack(dists)
             rewards = np.array(rewards)
-            minibatch_queue.put((boards, dists, rewards))
+            # TODO: magic numbers
+            if n_steps < 400000:
+                lr = 1e-2
+            elif n_steps < 600000:
+                lr = 1e-3
+            else:
+                lr = 1e-4
+            minibatch_queue.put((boards, dists, rewards, lr))
+            n_steps += 1
 
     def submit_models(self, notify_queue):
         t = 0
@@ -119,7 +131,7 @@ class TrainManager(mp.Process):
                         running_ce_loss / self.save_interval))
                 running_loss = 0
                 running_mse_loss, running_ce_loss = 0, 0
-            if t % 10*self.save_interval == 0:
+            if t % (10*self.save_interval) == 0:
                 torch.save(self.policy.state_dict(),
                     "models/alpha-{}.pt".format(t))
 

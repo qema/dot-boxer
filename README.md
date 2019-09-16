@@ -1,1 +1,3 @@
 # Dot Boxer: AlphaZero for the Dots and Boxes game
+
+Implementation of [AlphaZero](https://deepmind.com/blog/article/alphazero-shedding-new-light-grand-games-chess-shogi-and-go) focused on learning to play the [Dots and Boxes](https://en.wikipedia.org/wiki/Dots_and_Boxes) game (although chess is included as a swappable component). Following the AlphaZero method, through self-play, the agent learns a policy and value network that guides a Monte Carlo tree search on game states. On a 5x5 board, it learns to outplay an agent that uses Monte Carlo tree search with uninitialized policy and value network.
